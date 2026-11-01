@@ -1,4 +1,4 @@
-import { useRequest } from "../router.ts";
+import { useRequest } from "../request.ts";
 
 export function Home() {
   const req = useRequest();
@@ -8,6 +8,10 @@ export function Home() {
       <p>
         このページは Node.js を使わず、axum が受けたリクエストごとに rquickjs (QuickJS) 上で
         Preact の TSX コンポーネントを <code>renderToString</code> して返しています。
+      </p>
+      <p>
+        ハイドレーション後のリンク遷移は preact-iso のルーターがクライアント側で行い、ページのデータだけを{" "}
+        <code>/_data/...</code> から取得します（フッターに取得元が表示されます）。再読み込みすると改めて SSR されます。
       </p>
       <table>
         <tbody>

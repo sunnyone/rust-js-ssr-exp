@@ -1,7 +1,8 @@
 // ルート定義。
 // loader はサーバーでのみ実行され（Rust が公開する host API を使える）、
-// 戻り値はページの props になり、HTML に埋め込まれてクライアントのハイドレーションにも使われる。
+// 戻り値はページの props になる。初回は HTML に埋め込まれ、クライアント遷移時は /_data/... で取得される。
 import type { ComponentType } from "preact";
+import { exec } from "preact-iso/router";
 import type { Host } from "./host.ts";
 import type { ServerRequest } from "./types.ts";
 import { Home } from "./pages/Home.tsx";
@@ -20,7 +21,7 @@ export interface LoaderArgs {
 /** loader の戻り値。status 以外はページコンポーネントの props になる */
 export type LoaderResult<P> = P & { status?: number };
 
-export interface Route<P = any> {
+export interface RouteDef<P = any> {
   path: string;
   component: ComponentType<P>;
   title: (data: P) => string;
@@ -28,11 +29,11 @@ export interface Route<P = any> {
 }
 
 /** 型推論のためのヘルパー（component の props と loader の戻り値を一致させる） */
-function route<P>(r: Route<P>): Route<P> {
+function route<P>(r: RouteDef<P>): RouteDef<P> {
   return r;
 }
 
-export const routes: Route[] = [
+export const routes: RouteDef[] = [
   route({ path: "/", component: Home, title: () => "Home" }),
   route({
     path: "/counter",
@@ -57,9 +58,19 @@ export const routes: Route[] = [
   }),
 ];
 
+/** どのルートにもマッチしない場合（<Route default>） */
 export const notFound = route({
   path: "*",
   component: NotFound,
   title: () => "Not Found",
   loader: () => ({ status: 404 }),
 });
+
+/** preact-iso の <Router> と同じ規則でルートを選ぶ（サーバー側の loader 実行用） */
+export function matchRoute(path: string): { route: RouteDef; params: Record<string, string> } {
+  for (const r of routes) {
+    const m = exec(path, r.path);
+    if (m) return { route: r, params: m.params };
+  }
+  return { route: notFound, params: {} };
+}

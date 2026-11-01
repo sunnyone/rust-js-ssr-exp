@@ -1,15 +1,12 @@
-// ブラウザ側エントリ。SSR された HTML にイベントハンドラ等をハイドレーションする。
+// ブラウザ側エントリ。SSR された HTML をハイドレーションし、以降のページ遷移は preact-iso が担う。
 import { hydrate } from "preact";
 import { App } from "./App.tsx";
-import { notFound, routes } from "./routes.ts";
-import type { HydrationState } from "./types.ts";
+import { primePage } from "./page-data.ts";
+import type { PageEntry } from "./types.ts";
 import "./style.css";
 
-const state: HydrationState = JSON.parse(document.getElementById("__SSR_STATE__")!.textContent!);
-const route = routes.find((r) => r.path === state.routePath) ?? notFound;
+const entry: PageEntry = JSON.parse(document.getElementById("__SSR_STATE__")!.textContent!);
+primePage(location.pathname + location.search, entry);
 
-hydrate(
-  <App page={route.component} data={state.data} request={state.request} />,
-  document.getElementById("app")!,
-);
+hydrate(<App />, document.getElementById("app")!);
 document.documentElement.dataset.hydrated = "true";

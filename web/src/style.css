@@ -12,3 +12,4 @@ th { text-align: left; padding-right: 1rem; }
 .counter button { font-size: 1.2rem; width: 2.5rem; }
 .meta { color: #656d76; }
 footer { font-size: .8rem; color: #656d76; }
+.loading { font-size: .8rem; color: #9a6700; }

@@ -10,7 +10,9 @@
     "check:hydration": "node scripts/check-hydration.mjs"
   },
   "dependencies": {
+    "core-js": "^3.51.0",
     "preact": "^11.1.1",
+    "preact-iso": "^2.12.2",
     "preact-render-to-string": "^6.8.2"
   },
   "devDependencies": {

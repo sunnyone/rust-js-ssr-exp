@@ -1,4 +1,4 @@
-import { useRequest } from "../router.ts";
+import { useRequest } from "../request.ts";
 
 export function NotFound() {
   const req = useRequest();

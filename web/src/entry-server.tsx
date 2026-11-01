@@ -1,40 +1,59 @@
-// サーバー側エントリ。Rust (rquickjs) からリクエストごとに render() が呼ばれる。
+// サーバー側エントリ。Rust (rquickjs) からリクエストごとに呼ばれる。
 // `vite build --ssr` で依存込みの単一 ESM にバンドルされる。
+//
+//   render(requestJson)   → RenderResult の JSON（HTML の SSR）
+//   loadPage(requestJson) → PageEntry の JSON（クライアント遷移用の /_data/...）
 import { renderToString } from "preact-render-to-string";
+import { clearLocation, setLocation } from "./server/environment.ts";
 import { App } from "./App.tsx";
 import { host } from "./host.ts";
-import { findRoute } from "./router.ts";
-import { notFound, routes } from "./routes.ts";
-import type { RenderResult, RequestInfo, ServerRequest } from "./types.ts";
+import { clearPages, documentTitle, primePage } from "./page-data.ts";
+import { matchRoute } from "./routes.ts";
+import type { PageEntry, RenderResult, ServerRequest } from "./types.ts";
 
-/**
- * @param requestJson Rust から渡されるリクエスト情報 (ServerRequest の JSON)
- * @returns RenderResult の JSON
- */
-export function render(requestJson: string): string {
-  const req: ServerRequest = JSON.parse(requestJson);
-  const matched = findRoute(routes, req.path);
-  const route = matched ? matched.route : notFound;
-  const params = matched ? matched.params : {};
-
+/** ルートの loader を実行してページデータを作る */
+function buildEntry(req: ServerRequest): PageEntry {
+  const { route, params } = matchRoute(req.path);
   const { status = 200, ...data } = route.loader
     ? route.loader({ params, query: req.query, request: req, host })
     : {};
-
-  const request: RequestInfo = {
-    ...req,
-    params,
-    routePath: route.path,
-    worker: host.workerId(),
-    renderedAt: new Date(req.nowMs).toISOString(),
-  };
-  const html = renderToString(<App page={route.component} data={data} request={request} />);
-
-  const result: RenderResult = {
+  return {
     status,
     title: route.title(data),
-    html,
-    state: { routePath: route.path, data, request },
+    routePath: route.path,
+    data,
+    request: {
+      ...req,
+      params,
+      routePath: route.path,
+      worker: host.workerId(),
+      renderedAt: new Date(req.nowMs).toISOString(),
+    },
   };
-  return JSON.stringify(result);
+}
+
+export function render(requestJson: string): string {
+  const req: ServerRequest = JSON.parse(requestJson);
+  const entry = buildEntry(req);
+
+  // Context はリクエスト間で再利用されるので、リクエスト固有の状態は描画後に必ず消す
+  setLocation(req.origin + req.path + req.search);
+  try {
+    // LocationProvider と同じ方法で URL キーを作る（useLocation().url と一致させる）
+    primePage(location.pathname + location.search, entry);
+    const result: RenderResult = {
+      status: entry.status,
+      title: documentTitle(entry.title),
+      html: renderToString(<App />),
+      state: entry,
+    };
+    return JSON.stringify(result);
+  } finally {
+    clearPages();
+    clearLocation();
+  }
+}
+
+export function loadPage(requestJson: string): string {
+  return JSON.stringify(buildEntry(JSON.parse(requestJson)));
 }

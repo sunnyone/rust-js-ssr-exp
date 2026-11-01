@@ -2,7 +2,8 @@
 //!
 //! QuickJS の Runtime はスレッドをまたいで共有できないため、専用 OS スレッドを N 本立て、
 //! 各スレッドが自分の Runtime / Context を持ち、起動時に Vite が出力した SSR バンドル
-//! (`web/dist/server/entry-server.js`、依存を同梱した単一 ESM) を評価して `render` 関数を保持しておく。axum のハンドラはジョブをチャネルに投げ、結果を oneshot で受け取る。
+//! (`web/dist/server/entry-server.js`、依存を同梱した単一 ESM) を評価して export された関数を保持しておく。
+//! axum のハンドラはジョブをチャネルに投げ、結果を oneshot で受け取る。
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -13,7 +14,6 @@ use std::time::{Duration, Instant};
 use anyhow::{Context as _, anyhow};
 use rquickjs::prelude::{Coerced, Rest};
 use rquickjs::{Context, Ctx, Error, Function, Module, Object, Persistent, Runtime};
-use serde::Deserialize;
 use tokio::sync::oneshot;
 
 use crate::posts::PostStore;
@@ -24,24 +24,37 @@ const BUNDLE_NAME: &str = "entry-server.js";
 const MEMORY_LIMIT: usize = 64 * 1024 * 1024;
 const MAX_STACK_SIZE: usize = 1024 * 1024;
 
-/// entry-server.tsx の render() が返す値（web/src/types.ts の RenderResult）
-#[derive(Debug, Deserialize)]
-pub struct RenderOutput {
-    pub status: u16,
-    pub title: String,
-    pub html: String,
-    pub state: serde_json::Value,
+/// SSR バンドルが export する関数。いずれも `(requestJson: string) => string`
+#[derive(Debug, Clone, Copy)]
+pub enum Export {
+    /// HTML を SSR する（web/src/types.ts の RenderResult を返す）
+    Render,
+    /// クライアント遷移用にページデータだけを返す（PageEntry を返す）
+    LoadPage,
 }
 
-pub struct Rendered {
-    pub output: RenderOutput,
+impl Export {
+    const ALL: [Export; 2] = [Export::Render, Export::LoadPage];
+
+    fn name(self) -> &'static str {
+        match self {
+            Export::Render => "render",
+            Export::LoadPage => "loadPage",
+        }
+    }
+}
+
+/// JS 関数の戻り値（JSON 文字列）と実行情報
+pub struct Called {
+    pub json: String,
     pub worker: usize,
     pub elapsed: Duration,
 }
 
 struct Job {
+    export: Export,
     request_json: String,
-    reply: oneshot::Sender<Result<Rendered, String>>,
+    reply: oneshot::Sender<Result<Called, String>>,
 }
 
 #[derive(Clone)]
@@ -82,11 +95,11 @@ impl SsrPool {
         Ok(Self { tx })
     }
 
-    pub async fn render(&self, request_json: String) -> Result<Rendered, String> {
+    pub async fn call(&self, export: Export, request_json: String) -> Result<Called, String> {
         let (reply, rx) = oneshot::channel();
         let tx = self.tx.clone();
         // キューが満杯のときに async ランタイムをブロックしないよう blocking スレッドで送る
-        tokio::task::spawn_blocking(move || tx.send(Job { request_json, reply }))
+        tokio::task::spawn_blocking(move || tx.send(Job { export, request_json, reply }))
             .await
             .map_err(|e| e.to_string())?
             .map_err(|_| "ssr pool is closed".to_string())?;
@@ -99,7 +112,7 @@ struct Worker {
     timeout: Duration,
     deadline: Rc<Cell<Option<Instant>>>,
     // context は runtime より先に drop される必要がある（フィールドは宣言順に drop される）
-    render: Persistent<Function<'static>>,
+    exports: Vec<Persistent<Function<'static>>>, // Export::ALL と同じ順
     context: Context,
     _runtime: Runtime,
 }
@@ -118,7 +131,7 @@ impl Worker {
         // バンドルは自己完結しているのでモジュールローダーは設定しない（import があれば起動時にエラーになる）
         let context = Context::full(&runtime)?;
 
-        let render = context.with(|ctx| -> anyhow::Result<_> {
+        let exports = context.with(|ctx| -> anyhow::Result<_> {
             install_globals(&ctx, id, posts).map_err(|e| js_error(&ctx, e))?;
             let namespace = Module::declare(ctx.clone(), BUNDLE_NAME, bundle)
                 .and_then(|m| {
@@ -127,13 +140,19 @@ impl Worker {
                     module.namespace()
                 })
                 .map_err(|e| js_error(&ctx, e))?;
-            let render: Function = namespace
-                .get("render")
-                .map_err(|e| anyhow!("{BUNDLE_NAME} must export render(): {}", js_error(&ctx, e)))?;
-            Ok(Persistent::save(&ctx, render))
+            Export::ALL
+                .iter()
+                .map(|export| {
+                    let name = export.name();
+                    let f: Function = namespace
+                        .get(name)
+                        .map_err(|e| anyhow!("{BUNDLE_NAME} must export {name}(): {}", js_error(&ctx, e)))?;
+                    Ok(Persistent::save(&ctx, f))
+                })
+                .collect()
         })?;
 
-        Ok(Self { id, timeout, deadline, render, context, _runtime: runtime })
+        Ok(Self { id, timeout, deadline, exports, context, _runtime: runtime })
     }
 
     fn run(self, rx: &Mutex<mpsc::Receiver<Job>>) {
@@ -144,21 +163,18 @@ impl Worker {
             };
             let started = Instant::now();
             self.deadline.set(Some(started + self.timeout));
-            let result = self.render_once(&job.request_json);
+            let result = self.call(job.export, &job.request_json);
             self.deadline.set(None);
 
-            let result = result.map(|output| Rendered { output, worker: self.id, elapsed: started.elapsed() });
+            let result = result.map(|json| Called { json, worker: self.id, elapsed: started.elapsed() });
             let _ = job.reply.send(result);
         }
     }
 
-    fn render_once(&self, request_json: &str) -> Result<RenderOutput, String> {
+    fn call(&self, export: Export, request_json: &str) -> Result<String, String> {
         self.context.with(|ctx| {
-            let render = self.render.clone().restore(&ctx).map_err(|e| e.to_string())?;
-            let json: String = render
-                .call((request_json,))
-                .map_err(|e| js_error(&ctx, e).to_string())?;
-            serde_json::from_str(&json).map_err(|e| format!("invalid render() result: {e}"))
+            let f = self.exports[export as usize].clone().restore(&ctx).map_err(|e| e.to_string())?;
+            f.call((request_json,)).map_err(|e| js_error(&ctx, e).to_string())
         })
     }
 }
