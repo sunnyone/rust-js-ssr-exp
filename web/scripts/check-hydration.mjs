@@ -1,5 +1,6 @@
 // 起動中の Rust サーバーから SSR された HTML を取得し、happy-dom 上でクライアントバンドルを実行して
-// ハイドレーションとイベントハンドラの動作を確認する（ブラウザが無い環境向けの検証用）。
+// ハイドレーション、イベントハンドラ、preact-iso によるクライアント遷移の動作を確認する
+// （ブラウザが無い環境向けの検証用）。
 //
 //   node scripts/check-hydration.mjs [baseUrl]   (既定 http://localhost:3000)
 import { Window } from "happy-dom";
@@ -41,6 +42,24 @@ function assert(cond, message) {
 const badge = (w) => w.document.querySelector("[data-testid=hydration]").textContent;
 const count = (w) => w.document.querySelector("[data-testid=count]").textContent;
 const tick = () => new Promise((r) => setTimeout(r, 20));
+const h1 = (w) => w.document.querySelector("main h1")?.textContent;
+const source = (w) => w.document.querySelector("[data-testid=source]")?.textContent;
+
+/** 条件が満たされるまで待つ（クライアント遷移は /_data の取得を待つので非同期） */
+async function eventually(cond, timeoutMs = 2000) {
+  const until = Date.now() + timeoutMs;
+  while (!cond()) {
+    if (Date.now() > until) return false;
+    await tick();
+  }
+  return true;
+}
+
+function clickLink(window, href) {
+  const a = [...window.document.querySelectorAll("a")].find((el) => el.getAttribute("href") === href);
+  if (!a) throw new Error(`link ${href} not found`);
+  a.click();
+}
 
 {
   const { window, status, ssrBadge } = await hydrate("/counter?start=42");
@@ -75,5 +94,46 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   const { window, status } = await hydrate("/nope");
   assert(status === 404, "/nope returns 404");
   assert(badge(window) === "Hydrated (client)", "404 page also hydrates");
+  await window.happyDOM.close();
+}
+
+{
+  // preact-iso によるクライアント遷移: ページを再読み込みせず /_data/... からデータを取得して描画する
+  const { window } = await hydrate("/posts");
+  window.__notReloaded = true;
+  assert(source(window) === "Server-rendered HTML", "initial page is server-rendered");
+
+  clickLink(window, "/posts/2");
+  assert(await eventually(() => h1(window) === "QuickJS で SSR"), "client navigation to /posts/2 renders the post");
+  assert(window.location.pathname === "/posts/2", "URL updated by pushState");
+  assert(window.__notReloaded === true, "no full page reload");
+  assert(source(window) === "Client navigation (data from /_data)", "page data came from /_data");
+  assert(window.document.title === "QuickJS で SSR · Preact SSR on rquickjs", "document.title updated");
+  assert(window.document.querySelectorAll("main").length === 1, "single <main> after navigation");
+
+  const like = window.document.querySelector("article button");
+  like.click();
+  await tick();
+  assert(like.textContent === "♥ 1", "like button works on a client-navigated page");
+
+  window.history.back();
+  assert(await eventually(() => h1(window) === "Posts"), "history.back() renders /posts again");
+  assert(window.location.pathname === "/posts", "history.back() restores the URL");
+
+  clickLink(window, "/counter");
+  assert(await eventually(() => h1(window) === "Counter"), "client navigation to /counter");
+  assert(window.document.querySelector("nav a.active")?.getAttribute("href") === "/counter", "nav highlights /counter");
+  assert(count(window) === "0", "counter starts at 0 without ?start");
+
+  clickLink(window, "/counter?start=42");
+  assert(
+    await eventually(() => count(window) === "42"),
+    "same route with a new query (/counter?start=42) reloads data and resets state",
+  );
+
+  window.history.pushState(null, "", "/posts/999");
+  window.dispatchEvent(new window.PopStateEvent("popstate"));
+  assert(await eventually(() => h1(window) === "Post not found"), "popstate to /posts/999 renders not-found page");
+  assert(window.__notReloaded === true, "still the same document after all navigations");
   await window.happyDOM.close();
 }
