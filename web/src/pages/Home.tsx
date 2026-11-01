@@ -1,0 +1,45 @@
+import { useRequest } from "../router.ts";
+
+export function Home() {
+  const req = useRequest();
+  return (
+    <section>
+      <h1>Preact SSR on Rust</h1>
+      <p>
+        このページは Node.js を使わず、axum が受けたリクエストごとに rquickjs (QuickJS) 上で
+        Preact の TSX コンポーネントを <code>renderToString</code> して返しています。
+      </p>
+      <table>
+        <tbody>
+          <tr>
+            <th>Method</th>
+            <td>{req.method}</td>
+          </tr>
+          <tr>
+            <th>Path</th>
+            <td>{req.path}</td>
+          </tr>
+          <tr>
+            <th>Query</th>
+            <td>
+              <code>{JSON.stringify(req.query)}</code>
+            </td>
+          </tr>
+          <tr>
+            <th>User-Agent</th>
+            <td>{req.userAgent ?? "(none)"}</td>
+          </tr>
+          <tr>
+            <th>Rendered at</th>
+            <td data-testid="rendered-at">{req.renderedAt}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        クエリを付けて再読み込みすると、その値がサーバーでレンダリングされます（例:{" "}
+        <a href="/?name=quickjs">/?name=quickjs</a>）。
+      </p>
+      {req.query.name && <p class="greet">Hello, {req.query.name}!</p>}
+    </section>
+  );
+}
