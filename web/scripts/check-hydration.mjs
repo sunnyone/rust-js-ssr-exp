@@ -68,7 +68,7 @@ function clickLink(window, href) {
   assert(window.document.documentElement.dataset.hydrated === "true", "client entry ran");
   assert(badge(window) === "Hydrated (client)", "badge switched to hydrated (useEffect ran)");
   assert(count(window) === "42", "count keeps the server-rendered value 42");
-  const [minus, plus] = window.document.querySelectorAll(".counter button");
+  const [minus, plus] = window.document.querySelectorAll("[data-testid=counter] button");
   plus.click();
   plus.click();
   await tick();
@@ -76,7 +76,7 @@ function clickLink(window, href) {
   minus.click();
   await tick();
   assert(count(window) === "43", "clicking - once → 43");
-  assert(window.document.querySelectorAll(".counter").length === 1, "no duplicated DOM after hydration");
+  assert(window.document.querySelectorAll("[data-testid=counter]").length === 1, "no duplicated DOM after hydration");
   await window.happyDOM.close();
 }
 
@@ -122,7 +122,7 @@ function clickLink(window, href) {
 
   clickLink(window, "/counter");
   assert(await eventually(() => h1(window) === "Counter"), "client navigation to /counter");
-  assert(window.document.querySelector("nav a.active")?.getAttribute("href") === "/counter", "nav highlights /counter");
+  assert(window.document.querySelector('nav a[aria-current="page"]')?.getAttribute("href") === "/counter", "nav highlights /counter");
   assert(count(window) === "0", "counter starts at 0 without ?start");
 
   clickLink(window, "/counter?start=42");
@@ -137,3 +137,4 @@ function clickLink(window, href) {
   assert(window.__notReloaded === true, "still the same document after all navigations");
   await window.happyDOM.close();
 }
+

@@ -1,0 +1,2 @@
+/* Panda CSS が src/ の css() / cva() 呼び出しを静的に抽出し、各レイヤーに CSS を生成する */
+@layer reset, base, tokens, recipes, utilities;

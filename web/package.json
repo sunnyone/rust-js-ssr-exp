@@ -7,7 +7,8 @@
     "build:client": "vite build",
     "build:server": "vite build --ssr src/entry-server.tsx",
     "typecheck": "tsc --noEmit",
-    "check:hydration": "node scripts/check-hydration.mjs"
+    "check:hydration": "node scripts/check-hydration.mjs",
+    "prepare": "panda codegen"
   },
   "dependencies": {
     "core-js": "^3.51.0",
@@ -16,6 +17,8 @@
     "preact-render-to-string": "^6.8.2"
   },
   "devDependencies": {
+    "@pandacss/dev": "^2.4.0",
+    "@pandacss/preset-base": "^2.4.0",
     "happy-dom": "^21.0.4",
     "typescript": "^7.0.2",
     "vite": "^8.3.5"

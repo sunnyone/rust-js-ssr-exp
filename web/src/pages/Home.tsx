@@ -1,4 +1,7 @@
+import { css } from "../../styled-system/css";
 import { useRequest } from "../request.ts";
+
+const th = css({ textAlign: "left", pr: "1rem" });
 
 export function Home() {
   const req = useRequest();
@@ -16,25 +19,25 @@ export function Home() {
       <table>
         <tbody>
           <tr>
-            <th>Method</th>
+            <th class={th}>Method</th>
             <td>{req.method}</td>
           </tr>
           <tr>
-            <th>Path</th>
+            <th class={th}>Path</th>
             <td>{req.path}</td>
           </tr>
           <tr>
-            <th>Query</th>
+            <th class={th}>Query</th>
             <td>
               <code>{JSON.stringify(req.query)}</code>
             </td>
           </tr>
           <tr>
-            <th>User-Agent</th>
+            <th class={th}>User-Agent</th>
             <td>{req.userAgent ?? "(none)"}</td>
           </tr>
           <tr>
-            <th>Rendered at</th>
+            <th class={th}>Rendered at</th>
             <td data-testid="rendered-at">{req.renderedAt}</td>
           </tr>
         </tbody>
@@ -43,7 +46,7 @@ export function Home() {
         クエリを付けて再読み込みすると、その値がサーバーでレンダリングされます（例:{" "}
         <a href="/?name=quickjs">/?name=quickjs</a>）。
       </p>
-      {req.query.name && <p class="greet">Hello, {req.query.name}!</p>}
+      {req.query.name && <p>Hello, {req.query.name}!</p>}
     </section>
   );
 }

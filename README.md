@@ -28,7 +28,9 @@ Preact + TypeScript (TSX) のアプリを、**リクエストごとに** Rust (a
 
 | パス | 内容 |
 | --- | --- |
-| `web/` | Preact アプリ（npm プロジェクト、Vite、TypeScript） |
+| `web/` | Preact アプリ（npm プロジェクト、Vite、TypeScript、Panda CSS） |
+| `web/panda.config.ts` | Panda CSS の設定（色のトークン、グローバルスタイル） |
+| `web/src/index.css` | Panda の cascade layer 宣言。PostCSS（`postcss.config.cjs`）経由で Vite のビルド時に CSS が生成される |
 | `web/src/entry-server.tsx` | SSR エントリ。`render(requestJson)`（HTML）と `loadPage(requestJson)`（遷移用データ）を export |
 | `web/src/entry-client.tsx` | ブラウザエントリ。埋め込まれた状態をキャッシュに入れて `hydrate()` |
 | `web/src/App.tsx` | preact-iso の `LocationProvider` / `Router` によるルーティング |
@@ -37,7 +39,7 @@ Preact + TypeScript (TSX) のアプリを、**リクエストごとに** Rust (a
 | `web/src/server/environment.ts` | QuickJS 用の `URL`（core-js）と、リクエストごとの `location` スタブ |
 | `web/src/host.ts` | Rust が公開する `__host` の型付きラッパー（サーバー専用） |
 | `web/src/types.ts` | Rust ↔ JS 間でやり取りするデータの型 |
-| `web/scripts/check-hydration.mjs` | 起動中のサーバーに対するハイドレーション検証（happy-dom） |
+| `web/scripts/check-hydration.mjs` | 起動中のサーバーに対するハイドレーション・遷移の検証（happy-dom） |
 | `src/assets.rs` | `web/dist` の読み込み。Vite manifest からクライアントの script / css タグを生成 |
 | `src/ssr.rs` | rquickjs ワーカープール。`console`・`__host` の公開、タイムアウト（interrupt handler）、メモリ上限 |
 | `src/main.rs` | axum。`/assets/*` は Vite の出力を配信（長期キャッシュ）、`/_data/*` は遷移用 JSON、それ以外の GET はすべて SSR |
@@ -79,6 +81,25 @@ cd web && npm run check:hydration -- http://localhost:3000   # サーバー起�
 `check:hydration` は SSR された HTML を happy-dom に読み込み、ビルド済みのクライアントバンドルを実行して、
 ハイドレーション（バッジの切り替え）、SSR 値の引き継ぎ、ボタン操作に加えて、
 クライアント遷移（再読み込みなしで `/_data` から取得、`history.back()`、同一ルートでのクエリ変更、404）を確認します。
+
+## スタイル（Panda CSS）
+
+スタイルは [Panda CSS](https://panda-css.com) の `css()` / `cva()` で各コンポーネントに書きます。
+
+```tsx
+import { css, cva } from "../../styled-system/css";
+
+const badge = cva({ base: { fontSize: "0.8rem" }, variants: { hydrated: { true: { color: "success.fg" } } } });
+<main class={css({ bg: "surface", borderColor: "border" })}>…</main>
+```
+
+- Panda はビルド時に `src/` を静的解析して atomic CSS を生成します。`css()` には静的に解析できる値を渡してください
+  （実行時に組み立てたオブジェクトは CSS が生成されません）。状態による切り替えは `cva()` の variants を使います。
+- `css()` / `cva()` はクラス名を返す小さなランタイムで、SSR（QuickJS）でもブラウザでも同じクラス名になります。
+  CSS ファイルはブラウザにだけ配信し、SSR バンドルには含めません。
+- `styled-system/` は生成物なのでコミットしていません。`npm ci` / `npm install` 時に `prepare`（`panda codegen`）で生成されます。
+- 既存の見た目を保つため preflight（リセット CSS）は無効です。preset-panda は既定トークンの CSS 変数を全量出力する（約 27KB）ので使わず、
+  必要な色だけを `panda.config.ts` の semantic tokens に定義しています。
 
 ## 制約・メモ
 

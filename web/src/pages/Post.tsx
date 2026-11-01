@@ -1,4 +1,5 @@
 import { useState } from "preact/hooks";
+import { css } from "../../styled-system/css";
 import type { Post as PostData } from "../types.ts";
 
 function LikeButton() {
@@ -20,7 +21,7 @@ export function Post({ post }: { post: PostData | null }) {
   return (
     <article>
       <h1>{post.title}</h1>
-      <p class="meta">by {post.author}</p>
+      <p class={css({ color: "fg.muted" })}>by {post.author}</p>
       <p>{post.body}</p>
       <LikeButton />
       <p>

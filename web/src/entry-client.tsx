@@ -3,7 +3,7 @@ import { hydrate } from "preact";
 import { App } from "./App.tsx";
 import { primePage } from "./page-data.ts";
 import type { PageEntry } from "./types.ts";
-import "./style.css";
+import "./index.css";
 
 const entry: PageEntry = JSON.parse(document.getElementById("__SSR_STATE__")!.textContent!);
 primePage(location.pathname + location.search, entry);

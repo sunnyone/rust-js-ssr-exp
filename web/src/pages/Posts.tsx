@@ -5,7 +5,7 @@ export function Posts({ posts }: { posts: Post[] }) {
     <section>
       <h1>Posts</h1>
       <p>一覧データは route の loader から Rust 側の関数（<code>__host.listPosts</code>）を呼んで取得しています。</p>
-      <ul class="posts">
+      <ul>
         {posts.map((post) => (
           <li key={post.id}>
             <a href={`/posts/${post.id}`}>{post.title}</a>
