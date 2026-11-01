@@ -138,3 +138,21 @@ function clickLink(window, href) {
   await window.happyDOM.close();
 }
 
+{
+  // Panda CSS は css() / cva() を静的解析して CSS を生成する。SSR 時とハイドレーション後の DOM で使われている
+  // すべてのクラスに対応するルールがビルド済み CSS にあることを確認する（抽出漏れの検出）
+  const missing = new Set();
+  for (const path of ["/", "/counter", "/posts", "/posts/1", "/nope"]) {
+    const { window } = await hydrate(path);
+    const href = window.document.querySelector('link[rel="stylesheet"]')?.getAttribute("href");
+    const cssText = await readFile(distClient + href.replace(/^\//, ""), "utf8");
+    for (const el of window.document.querySelectorAll("[class]")) {
+      for (const cls of el.getAttribute("class").split(/\s+/).filter(Boolean)) {
+        const selector = "." + cls.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`);
+        if (!new RegExp(`${selector.replace(/[\\.]/g, (c) => `\\${c}`)}[{,:\\[ ]`).test(cssText)) missing.add(cls);
+      }
+    }
+    await window.happyDOM.close();
+  }
+  assert(missing.size === 0, `every class in the rendered DOM has a CSS rule${missing.size ? ` (missing: ${[...missing].join(", ")})` : ""}`);
+}

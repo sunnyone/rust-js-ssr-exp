@@ -39,7 +39,7 @@ Preact + TypeScript (TSX) のアプリを、**リクエストごとに** Rust (a
 | `web/src/server/environment.ts` | QuickJS 用の `URL`（core-js）と、リクエストごとの `location` スタブ |
 | `web/src/host.ts` | Rust が公開する `__host` の型付きラッパー（サーバー専用） |
 | `web/src/types.ts` | Rust ↔ JS 間でやり取りするデータの型 |
-| `web/scripts/check-hydration.mjs` | 起動中のサーバーに対するハイドレーション・遷移の検証（happy-dom） |
+| `web/scripts/check-hydration.mjs` | 起動中のサーバーに対するハイドレーション・遷移・CSS の検証（happy-dom） |
 | `src/assets.rs` | `web/dist` の読み込み。Vite manifest からクライアントの script / css タグを生成 |
 | `src/ssr.rs` | rquickjs ワーカープール。`console`・`__host` の公開、タイムアウト（interrupt handler）、メモリ上限 |
 | `src/main.rs` | axum。`/assets/*` は Vite の出力を配信（長期キャッシュ）、`/_data/*` は遷移用 JSON、それ以外の GET はすべて SSR |
@@ -80,7 +80,8 @@ cd web && npm run check:hydration -- http://localhost:3000   # サーバー起�
 
 `check:hydration` は SSR された HTML を happy-dom に読み込み、ビルド済みのクライアントバンドルを実行して、
 ハイドレーション（バッジの切り替え）、SSR 値の引き継ぎ、ボタン操作に加えて、
-クライアント遷移（再読み込みなしで `/_data` から取得、`history.back()`、同一ルートでのクエリ変更、404）を確認します。
+クライアント遷移（再読み込みなしで `/_data` から取得、`history.back()`、同一ルートでのクエリ変更、404）と、
+描画された DOM のすべてのクラスにビルド済み CSS のルールがあること（Panda の抽出漏れがないこと）を確認します。
 
 ## スタイル（Panda CSS）
 
