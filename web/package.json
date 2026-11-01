@@ -6,13 +6,15 @@
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
     "build:server": "vite build --ssr src/entry-server.tsx",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:hydration": "node scripts/check-hydration.mjs"
   },
   "dependencies": {
     "preact": "^11.1.1",
     "preact-render-to-string": "^6.8.2"
   },
   "devDependencies": {
+    "happy-dom": "^21.0.4",
     "typescript": "^7.0.2",
     "vite": "^8.3.5"
   }
